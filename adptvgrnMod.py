@@ -7,8 +7,8 @@ import math
 from functools import partial
 
 
-def adptvgrnMod(clip_in: vs.VideoNode, strength=0.25, size=1, sharp=50, static=True, luma_scaling=12, grain_chroma=True,
-                grainer=None, show_mask=False) -> vs.VideoNode:
+def adptvgrnMod(clip_in: vs.VideoNode, strength=0.25, cstrength=None, size=1, sharp=50, static=True, luma_scaling=12,
+                grain_chroma=True, grainer=None, show_mask=False) -> vs.VideoNode:
     """
     Original header:
     Generates grain based on frame and pixel brightness. Details can be found here:
@@ -22,20 +22,14 @@ def adptvgrnMod(clip_in: vs.VideoNode, strength=0.25, size=1, sharp=50, static=T
     New:
     - Option to add your own graining function (i.e. grainer=lambda x: core.f3kdb.Deband(x, y=0, cr=0, cb=0, grainy=64,
       dynamic_grain=True, keep_tv_range=True, output_depth=16)
+    - Fixed grain_chroma and added cstrength. Mod 2 sources with size=1 now work, too.
     """
 
     def m4(x):
         return 16 if x < 16 else math.floor(x / 4 + 0.5) * 4
 
     neutral = 1 << (get_depth(clip_in) - 1)
-    if grain_chroma == False and clip_in.format.color_family == vs.YUV:
-        clip = plane(clip_in, 0)
-        u = plane(clip_in, 1)
-        v = plane(clip_in, 2)
-    elif grain_chroma == False and clip_in.format.color_family != vs.YUV:
-        raise ValueError("Not graining chroma is only possible with YUV input at this time.")
-    else:
-        clip = clip_in
+    clip = clip_in
 
     def fill_lut(y):
         """
@@ -64,17 +58,21 @@ def adptvgrnMod(clip_in: vs.VideoNode, strength=0.25, size=1, sharp=50, static=T
 
     cw = clip.width  # ox
     ch = clip.height  # oy
-    sx = m4(cw / size)
-    sy = m4(ch / size)
+    sx = m4(cw / size) if size != 1 else cw
+    sy = m4(ch / size) if size != 1 else ch
     sxa = m4((cw + sx) / 2)
     sya = m4((ch + sy) / 2)
     b = sharp / -50 + 1
     c = (1 - b) / 2
+    if cstrength is None and grain_chroma is True:
+        cstrength = .5 * strength
+    elif cstrength != (0 or None) and grain_chroma is False:
+        raise ValueError("cstrength must be None or 0 if grain_chroma is False!")
 
     luma = get_y(fvf.Depth(clip_in, 8)).std.PlaneStats()
     blank = core.std.BlankClip(clip, sx, sy, color=[neutral for i in split(clip)])
     if grainer == None:
-        grained = core.grain.Add(blank, var=strength, constant=static)
+        grained = core.grain.Add(blank, var=strength, uvar=cstrength, constant=static)
     else:
         grained = grainer(blank)
     if size != 1 and (sx != cw or sy != ch):
@@ -85,9 +83,6 @@ def adptvgrnMod(clip_in: vs.VideoNode, strength=0.25, size=1, sharp=50, static=T
             grained = core.resize.Bicubic(grained, cw, ch, filter_param_a=b, filter_param_b=c)
 
     grained = core.std.MakeDiff(clip, grained)
-
-    if grain_chroma == False and clip_in.format.color_family == vs.YUV:
-        grained = core.std.ShufflePlanes([grained, u, v], [0, 0, 0], clip_in.format.color_family)
 
     mask = core.std.FrameEval(luma, partial(generate_mask, clip=luma), prop_src=luma)
     mask = core.resize.Spline36(mask, cw, ch)
