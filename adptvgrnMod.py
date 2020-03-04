@@ -7,7 +7,7 @@ from functools import partial
 
 
 def adptvgrnMod(clip_in: vs.VideoNode, strength=0.25, cstrength=None, size=1, sharp=50, static=True, luma_scaling=12,
-                grain_chroma=True, grainer=None, show_mask=False) -> vs.VideoNode:
+                grain_chroma=True, grainer=None, fade_edges=False, tv_range=True, show_mask=False) -> vs.VideoNode:
     """
     Original header:
     Generates grain based on frame and pixel brightness. Details can be found here:
@@ -23,6 +23,7 @@ def adptvgrnMod(clip_in: vs.VideoNode, strength=0.25, cstrength=None, size=1, sh
       dynamic_grain=True, keep_tv_range=True, output_depth=16)
     - Fixed grain_chroma and added cstrength. Mod 2 sources with size=1 now work, too.
     - Attempts to use Rust implementation of mask whenever possible with fallback to numpy version.
+    - Option to fade amount of grain added on edge values where grain raises/lowers average plane value.
     """
 
     def m4(x):
@@ -30,6 +31,7 @@ def adptvgrnMod(clip_in: vs.VideoNode, strength=0.25, cstrength=None, size=1, sh
 
     neutral = 1 << (get_depth(clip_in) - 1)
     clip = clip_in
+    dpth = get_depth(clip_in)
 
     try:
         mask = core.adg.Mask(clip.std.PlaneStats(), luma_scaling)
@@ -88,12 +90,24 @@ def adptvgrnMod(clip_in: vs.VideoNode, strength=0.25, cstrength=None, size=1, sh
         else:
             grained = core.resize.Bicubic(grained, cw, ch, filter_param_a=b, filter_param_b=c)
 
-    grained = core.std.MakeDiff(clip, grained)
+    if fade_edges:
+        if tv_range:
+            lo = 16 << (dpth - 8)
+            hi = [235 << (dpth - 8), 240 << (dpth - 8)]
+        else:
+            lo = 0
+            hi = 2 * [1 << dpth - 1]
+        clip = core.std.Expr([clip, grained], "x y {0} - abs - {1} < x y {0} - abs + {2} > or x y {0} - x + ?".format(
+            neutral, lo, hi[0]), planes=0)
+        grained = core.std.Expr([clip, grained], "x y {0} - abs - {1} < x y {0} - abs + {2} > or x y {0} - x + ?".format(
+            neutral, lo, hi[1]), planes=[1, 2])
+    else:
+        grained = core.std.MakeDiff(clip, grained)
 
     mask = core.resize.Spline36(mask, cw, ch)
 
-    if get_depth(clip) != 8:
-        mask = fvf.Depth(mask, bits=get_depth(clip))
+    if dpth != 8:
+        mask = fvf.Depth(mask, bits=dpth)
     if show_mask:
         return mask
 
