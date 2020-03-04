@@ -2,7 +2,6 @@ from vapoursynth import core
 import vapoursynth as vs
 from vsutil import get_depth, get_y, split, plane
 import fvsfunc as fvf
-import numpy as np
 import math
 from functools import partial
 
@@ -23,6 +22,7 @@ def adptvgrnMod(clip_in: vs.VideoNode, strength=0.25, cstrength=None, size=1, sh
     - Option to add your own graining function (i.e. grainer=lambda x: core.f3kdb.Deband(x, y=0, cr=0, cb=0, grainy=64,
       dynamic_grain=True, keep_tv_range=True, output_depth=16)
     - Fixed grain_chroma and added cstrength. Mod 2 sources with size=1 now work, too.
+    - Attempts to use Rust implementation of mask whenever possible with fallback to numpy version.
     """
 
     def m4(x):
@@ -31,31 +31,38 @@ def adptvgrnMod(clip_in: vs.VideoNode, strength=0.25, cstrength=None, size=1, sh
     neutral = 1 << (get_depth(clip_in) - 1)
     clip = clip_in
 
-    def fill_lut(y):
-        """
-        Using horner's method to compute this polynomial:
-        (1 - (1.124 * x - 9.466 * x² + 36.624 * x³ - 45.47 * x⁴ + 18.188 * x⁵)) ** ((y²) * luma_scaling) * 255
-        Using the normal polynomial is about 2.5x slower during the initial generation.
-        I know it doesn't matter as it only saves a few ms (or seconds at most), but god damn, just let me have
-        some fun here, will ya? Just truncating (rather than rounding) the array would also half the processing
-        time, but that would decrease the precision and is also just unnecessary.
-        """
-        x = np.arange(0, 1, 1 / (1 << 8))
-        z = (1 - (x * (1.124 + x * (-9.466 + x * (36.624 + x * (-45.47 + x * 18.188)))))) ** ((y ** 2) * luma_scaling)
-        if clip.format.sample_type == vs.INTEGER:
-            z = z * 255
-            z = np.rint(z).astype(int)
-        return z.tolist()
-
-    lut = [None] * 1000
-    for y in np.arange(0, 1, 0.001):
-        lut[int(round(y * 1000))] = fill_lut(y)
-
-    def generate_mask(n, f, clip):
-        frameluma = round(f.props.PlaneStatsAverage * 999)
-        table = lut[int(frameluma)]
-        return core.std.Lut(clip, lut=table)
-
+    try:
+        mask = core.adg.Mask(clip.std.PlaneStats(), luma_scaling)
+    except AttributeError:
+        import numpy as np
+        def fill_lut(y):
+            """
+            Using horner's method to compute this polynomial:
+            (1 - (1.124 * x - 9.466 * x² + 36.624 * x³ - 45.47 * x⁴ + 18.188 * x⁵)) ** ((y²) * luma_scaling) * 255
+            Using the normal polynomial is about 2.5x slower during the initial generation.
+            I know it doesn't matter as it only saves a few ms (or seconds at most), but god damn, just let me have
+            some fun here, will ya? Just truncating (rather than rounding) the array would also half the processing
+            time, but that would decrease the precision and is also just unnecessary.
+            """
+            x = np.arange(0, 1, 1 / (1 << 8))
+            z = (1 - (x * (1.124 + x * (-9.466 + x * (36.624 + x * (-45.47 + x * 18.188)))))) ** ((y ** 2) * luma_scaling)
+            if clip.format.sample_type == vs.INTEGER:
+                z = z * 255
+                z = np.rint(z).astype(int)
+            return z.tolist()
+    
+        lut = [None] * 1000
+        for y in np.arange(0, 1, 0.001):
+            lut[int(round(y * 1000))] = fill_lut(y)
+    
+        def generate_mask(n, f, clip):
+            frameluma = round(f.props.PlaneStatsAverage * 999)
+            table = lut[int(frameluma)]
+            return core.std.Lut(clip, lut=table)
+    
+        luma = get_y(fvf.Depth(clip_in, 8)).std.PlaneStats()
+        mask = core.std.FrameEval(luma, partial(generate_mask, clip=luma), prop_src=luma)
+    
     cw = clip.width  # ox
     ch = clip.height  # oy
     sx = m4(cw / size) if size != 1 else cw
@@ -69,7 +76,6 @@ def adptvgrnMod(clip_in: vs.VideoNode, strength=0.25, cstrength=None, size=1, sh
     elif cstrength != (0 or None) and grain_chroma is False:
         raise ValueError("cstrength must be None or 0 if grain_chroma is False!")
 
-    luma = get_y(fvf.Depth(clip_in, 8)).std.PlaneStats()
     blank = core.std.BlankClip(clip, sx, sy, color=[neutral for i in split(clip)])
     if grainer == None:
         grained = core.grain.Add(blank, var=strength, uvar=cstrength, constant=static)
@@ -84,7 +90,6 @@ def adptvgrnMod(clip_in: vs.VideoNode, strength=0.25, cstrength=None, size=1, sh
 
     grained = core.std.MakeDiff(clip, grained)
 
-    mask = core.std.FrameEval(luma, partial(generate_mask, clip=luma), prop_src=luma)
     mask = core.resize.Spline36(mask, cw, ch)
 
     if get_depth(clip) != 8:
