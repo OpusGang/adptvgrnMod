@@ -97,10 +97,8 @@ def adptvgrnMod(clip_in: vs.VideoNode, strength=0.25, cstrength=None, size=1, sh
         else:
             lo = 0
             hi = 2 * [1 << dpth - 1]
-        clip = core.std.Expr([clip, grained], "x y {0} - abs - {1} < x y {0} - abs + {2} > or x y {0} - x + ?".format(
-            neutral, lo, hi[0]), planes=0)
-        grained = core.std.Expr([clip, grained], "x y {0} - abs - {1} < x y {0} - abs + {2} > or x y {0} - x + ?".format(
-            neutral, lo, hi[1]), planes=[1, 2])
+        grained = core.std.Expr([clip, grained], ["x y {0} - abs - {1} < x y {0} - abs + {2} > or x y {0} - x + ?".format(
+            neutral, lo, hi[0]), "x y {0} - abs - {1} < x y {0} - abs + {2} > or x y {0} - x + ?".format(neutral, lo, hi[1])])
     else:
         grained = core.std.MakeDiff(clip, grained)
 
