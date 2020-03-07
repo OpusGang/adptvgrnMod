@@ -5,7 +5,7 @@ This combines kagefunc's `adaptive_grain` function with havsfunc's `GrainFactory
 ## Usage
 
 ```python
-adptvgrnMod(clip_in, strength=0.25, cstrength=None, size=1, sharp=50, static=True, luma_scaling=12, grain_chroma=True, grainer=None, fade_edges=False, tv_range=True, show_mask=False)
+adptvgrnMod(clip_in, strength=0.25, cstrength=None, size=1, sharp=50, static=True, luma_scaling=12, grain_chroma=True, grainer=None, fade_edges=False, tv_range=True, seed=-1, show_mask=False)
 ```
 
 **strength**
@@ -42,6 +42,9 @@ Whether to fade out graining as it gets close to the edges of allowed values. Fo
 
 **tv_range**
 Whether `fade_edges` should use full or limited range. Default is `True`.
+
+**seed**
+Seed to use in AddGrain. Default of `-1` is random.
 
 **show_mask**
 Whether to show generated mask. Default is `False`.
