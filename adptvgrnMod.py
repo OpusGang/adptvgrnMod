@@ -125,25 +125,49 @@ def FrameType(n, clip, funcB=lambda x: x, funcP=lambda x: x, funcI=lambda x: x):
 
 
 def frmtpfnc(clip_in, funcB=lambda x: x, funcP=lambda x: x, funcI=lambda x: x):
-    return core.std.FrameEval(clip_in, partial(FrameType, funcB=funcB, funcP=funcP, funcI=funcI))
+    return core.std.FrameEval(clip_in, partial(FrameType, clip=clip_in, funcB=funcB, funcP=funcP, funcI=funcI))
 
 
 def frmtpgrn(clip_in: vs.VideoNode, strength=[0.25, None, None], cstrength=[None, None, None], size=[1, None, None],
              sharp=[50, None, None], static=[True, None, None], luma_scaling=[12, None, None],
              grain_chroma=[True, None, None], grainer=[None, None, None], fade_edges=False, tv_range=True, seed=-1,
              show_mask=False) -> vs.VideoNode:
-    for i, value in enumerate(strength):
-        if value is None:
-            strength[i] = strength[i - 1] * .8
-    for i, value in enumerate(cstrength):
-        if value is None and i != 0:
-            cstrength[i] = cstrength[i - 1] * .8
-    size = [size[0] if x is None else x for x in size]
-    sharp = [sharp[0] if x is None else x for x in sharp]
-    static = [static[0] if x is None else x for x in static]
-    luma_scaling = [luma_scaling[0] if x is None else x for x in luma_scaling]
-    grain_chroma = [grain_chroma[0] if x is None else x for x in grain_chroma]
-    grainer = [grainer[0] if x is None else x for x in grainer]
+    if isinstance(strength, int):
+        strength = 3 * [strength]
+    elif None in strength:
+        for i, value in enumerate(strength):
+            if value is None:
+                strength[i] = strength[i - 1] * .8
+    if isinstance(cstrength, int):
+        cstrength = 3 * [cstrength]
+    elif None in cstrength:
+        for i, value in enumerate(cstrength):
+            if value is None and i != 0:
+                cstrength[i] = cstrength[i - 1] * .8
+    if isinstance(size, int):
+        size = 3 * [size]
+    elif None in size:
+        size = [size[0] if x is None else x for x in size]
+    if isinstance(sharp, int):
+        sharp = 3 * [sharp]
+    elif None in sharp:
+        sharp = [sharp[0] if x is None else x for x in sharp]
+    if isinstance(static, int):
+        static = 3 * [static]
+    elif None in static:
+        static = [static[0] if x is None else x for x in static]
+    if isinstance(luma_scaling, int):
+        luma_scaling = 3 * [luma_scaling]
+    elif None in luma_scaling:
+        luma_scaling = [luma_scaling[0] if x is None else x for x in luma_scaling]
+    if isinstance(grain_chroma, int):
+        grain_chroma = 3 * [grain_chroma]
+    elif None in grain_chroma:
+        grain_chroma = [grain_chroma[0] if x is None else x for x in grain_chroma]
+    if callable(grainer):
+        grainer = 3 * [grainer]
+    elif None in grainer:
+        grainer = [grainer[0] if x is None else x for x in grainer]
 
     return frmtpfnc(clip_in, funcB=lambda x: adptvgrnMod(x, strength[0], cstrength[0], size[0], sharp[0], static[0],
                                                          luma_scaling[0], grain_chroma[0], grainer[0], fade_edges,
