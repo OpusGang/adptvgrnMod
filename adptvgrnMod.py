@@ -7,7 +7,7 @@ from functools import partial
 
 
 def adptvgrnMod(clip_in: vs.VideoNode, strength=0.25, cstrength=None, size=1, sharp=50, static=True, luma_scaling=12,
-                grain_chroma=True, grainer=None, fade_edges=False, tv_range=True, seed=-1,
+                grain_chroma=True, grainer=None, fade_edges=False, tv_range=True, protect_neutral=True, seed=-1,
                 show_mask=False) -> vs.VideoNode:
     """
     Original header:
@@ -25,7 +25,8 @@ def adptvgrnMod(clip_in: vs.VideoNode, strength=0.25, cstrength=None, size=1, sh
     - Fixed grain_chroma and added cstrength. Mod 2 sources with size=1 now work, too.
     - Attempts to use Rust implementation of mask whenever possible with fallback to numpy version.
     - Option to fade amount of grain added on edge values where grain raises/lowers average plane value.
-    - Added seed option
+      - Additional protect_neutral parameter to keep neutral chroma in blacks neutral.
+    - Added seed option.
     """
 
     def m4(x):
@@ -88,7 +89,7 @@ def adptvgrnMod(clip_in: vs.VideoNode, strength=0.25, cstrength=None, size=1, sh
         raise ValueError("cstrength must be None or 0 if grain_chroma is False!")
 
     blank = core.std.BlankClip(clip, sx, sy, color=[neutral for i in split(clip)])
-    if grainer == None:
+    if grainer is None:
         grained = core.grain.Add(blank, var=strength, uvar=cstrength, constant=static, seed=seed)
     else:
         grained = grainer(blank)
@@ -105,10 +106,17 @@ def adptvgrnMod(clip_in: vs.VideoNode, strength=0.25, cstrength=None, size=1, sh
             hi = [235 << (dpth - 8), 240 << (dpth - 8)]
         else:
             lo = 0
-            hi = 2 * [1 << dpth - 1]
+            hi = 2 * [(1 << dpth) - 1]
         limit_expr = "x y {0} - abs - {1} < x y {0} - abs + {2} > or x y {0} - x + ?"
         grained = core.std.Expr([clip, grained], [limit_expr.format(
             neutral, lo, hi[0]), limit_expr.format(neutral, lo, hi[1])])
+        if protect_neutral:
+            neutral_mask = core.std.Expr(split(fvf.Depth(clip.resize.Bilinear(format=vs.YUV444P16), dpth)),
+                                         "x {0} <= x {1} >= or y {2} - abs {3} <= and z {2} - abs {3} <= and {4} {5} ?".format(
+                                             round(lo + 3 * cstrength) << (dpth - 8),
+                                             round(hi[1] - 3 * cstrength) << (dpth - 8), neutral,
+                                             round(3 * cstrength) << (dpth - 8), (1 << dpth) - 1, 0))
+            grained = core.std.MaskedMerge(grained, clip, neutral_mask, planes=[1, 2])
     else:
         grained = core.std.MakeDiff(clip, grained)
 
@@ -130,51 +138,32 @@ def frmtpfnc(clip_in, funcB=lambda x: x, funcP=lambda x: x, funcI=lambda x: x):
 
 def frmtpgrn(clip_in: vs.VideoNode, strength=[0.25, None, None], cstrength=[None, None, None], size=[1, None, None],
              sharp=[50, None, None], static=[True, None, None], luma_scaling=[12, None, None],
-             grain_chroma=[True, None, None], grainer=[None, None, None], fade_edges=False, tv_range=True, seed=-1,
-             show_mask=False) -> vs.VideoNode:
-    if isinstance(strength, int):
+             grain_chroma=[True, None, None], grainer=[None, None, None], fade_edges=False, tv_range=True,
+             protect_neutral=True, seed=-1,show_mask=False) -> vs.VideoNode:
+    if isinstance(strength, int) or isinstance(strength, float):
         strength = 3 * [strength]
-    elif None in strength:
-        for i, value in enumerate(strength):
-            if value is None:
-                strength[i] = strength[i - 1] * .8
-    if isinstance(cstrength, int):
+    if isinstance(cstrength, int) or isinstance(cstrength, float):
         cstrength = 3 * [cstrength]
-    elif None in cstrength:
-        for i, value in enumerate(cstrength):
-            if value is None and i != 0:
-                cstrength[i] = cstrength[i - 1] * .8
-    if isinstance(size, int):
+    if isinstance(size, int) or isinstance(size, float):
         size = 3 * [size]
-    elif None in size:
-        size = [size[0] if x is None else x for x in size]
-    if isinstance(sharp, int):
+    if isinstance(sharp, int) or isinstance(sharp, float):
         sharp = 3 * [sharp]
-    elif None in sharp:
-        sharp = [sharp[0] if x is None else x for x in sharp]
-    if isinstance(static, int):
+    if isinstance(static, bool):
         static = 3 * [static]
-    elif None in static:
-        static = [static[0] if x is None else x for x in static]
-    if isinstance(luma_scaling, int):
+    if isinstance(luma_scaling, int) or isinstance(luma_scaling, float):
         luma_scaling = 3 * [luma_scaling]
-    elif None in luma_scaling:
-        luma_scaling = [luma_scaling[0] if x is None else x for x in luma_scaling]
-    if isinstance(grain_chroma, int):
+    if isinstance(grain_chroma, bool):
         grain_chroma = 3 * [grain_chroma]
-    elif None in grain_chroma:
-        grain_chroma = [grain_chroma[0] if x is None else x for x in grain_chroma]
     if callable(grainer):
         grainer = 3 * [grainer]
-    elif None in grainer:
-        grainer = [grainer[0] if x is None else x for x in grainer]
 
-    return frmtpfnc(clip_in, funcB=lambda x: adptvgrnMod(x, strength[0], cstrength[0], size[0], sharp[0], static[0],
-                                                         luma_scaling[0], grain_chroma[0], grainer[0], fade_edges,
-                                                         tv_range, seed, show_mask),
+    return frmtpfnc(clip_in if not show_mask else get_y(clip_in),
+                    funcB=lambda x: adptvgrnMod(x, strength[0], cstrength[0], size[0], sharp[0], static[0],
+                                                luma_scaling[0], grain_chroma[0], grainer[0], fade_edges,
+                                                tv_range, protect_neutral, seed, show_mask),
                     funcP=lambda x: adptvgrnMod(x, strength[1], cstrength[1], size[1], sharp[1], static[1],
                                                 luma_scaling[1], grain_chroma[1], grainer[1], fade_edges, tv_range,
-                                                seed, how_mask),
+                                                protect_neutral, seed, show_mask),
                     funcI=lambda x: adptvgrnMod(x, strength[2], cstrength[2], size[2], sharp[2], static[2],
                                                 luma_scaling[2], grain_chroma[2], grainer[2], fade_edges, tv_range,
-                                                seed, show_mask))
+                                                protect_neutral, seed, show_mask))
