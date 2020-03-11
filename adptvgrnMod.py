@@ -85,8 +85,10 @@ def adptvgrnMod(clip_in: vs.VideoNode, strength=0.25, cstrength=None, size=1, sh
     c = (1 - b) / 2
     if cstrength is None and grain_chroma is True:
         cstrength = .5 * strength
-    elif cstrength != (0 or None) and grain_chroma is False:
+    elif cstrength != 0 and cstrength is not None and grain_chroma is False:
         raise ValueError("cstrength must be None or 0 if grain_chroma is False!")
+    elif cstrength is None and not grain_chroma:
+        cstrength = 0
 
     blank = core.std.BlankClip(clip, sx, sy, color=[neutral for i in split(clip)])
     if grainer is None:
