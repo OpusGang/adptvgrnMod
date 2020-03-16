@@ -6,8 +6,8 @@ import math
 from functools import partial
 
 
-def adptvgrnMod(clip_in: vs.VideoNode, strength=0.25, cstrength=None, size=1, sharp=50, static=True, luma_scaling=12,
-                grain_chroma=True, grainer=None, fade_edges=False, tv_range=True, protect_neutral=True, seed=-1,
+def adptvgrnMod(clip_in: vs.VideoNode, strength=0.25, cstrength=None, size=1, sharp=50, static=False, luma_scaling=12,
+                grain_chroma=True, grainer=None, fade_edges=True, tv_range=True, protect_neutral=True, seed=-1,
                 show_mask=False) -> vs.VideoNode:
     """
     Original header:
@@ -27,6 +27,7 @@ def adptvgrnMod(clip_in: vs.VideoNode, strength=0.25, cstrength=None, size=1, sh
     - Option to fade amount of grain added on edge values where grain raises/lowers average plane value.
       - Additional protect_neutral parameter to keep neutral chroma in blacks neutral.
     - Added seed option.
+    - Change defaults: static=False, fade_edges=True
     """
 
     def m4(x):
