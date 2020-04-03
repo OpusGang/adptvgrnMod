@@ -72,13 +72,13 @@ def adptvgrnMod(clip_in: vs.VideoNode, strength=0.25, cstrength=None, size=1, sh
         luma = get_y(fvf.Depth(clip_in, 8)).std.PlaneStats()
         mask = core.std.FrameEval(luma, partial(generate_mask, clip=luma), prop_src=luma)
 
-    cw = clip.width  # ox
-    ch = clip.height  # oy
-
-    if dpth != 8:
+    if mask.format.bits_per_sample != dpth:
         mask = fvf.Depth(mask, bits=dpth)
     if show_mask:
         return mask
+
+    cw = clip.width  # ox
+    ch = clip.height  # oy
 
     sx = m4(cw / size) if size != 1 else cw
     sy = m4(ch / size) if size != 1 else ch
@@ -101,9 +101,7 @@ def adptvgrnMod(clip_in: vs.VideoNode, strength=0.25, cstrength=None, size=1, sh
     if size != 1 and (sx != cw or sy != ch):
         if size > 1.5:
             grained = core.resize.Bicubic(grained, sxa, sya, filter_param_a=b, filter_param_b=c)
-            grained = core.resize.Bicubic(grained, cw, ch, filter_param_a=b, filter_param_b=c)
-        else:
-            grained = core.resize.Bicubic(grained, cw, ch, filter_param_a=b, filter_param_b=c)
+        grained = core.resize.Bicubic(grained, cw, ch, filter_param_a=b, filter_param_b=c)
 
     if fade_edges:
         if tv_range:
@@ -116,7 +114,7 @@ def adptvgrnMod(clip_in: vs.VideoNode, strength=0.25, cstrength=None, size=1, sh
         grained = core.std.Expr([clip, grained], [limit_expr.format(
             neutral, lo, hi[0]), limit_expr.format(neutral, lo, hi[1])])
         if protect_neutral and (grain_chroma or cstrength > 0):
-            max_value = round(2 * cstrength) << (dpth - 8)
+            max_value = round(3 * cstrength) << (dpth - 8)
             neutral_mask = core.std.Expr(split(fvf.Depth(clip.resize.Bilinear(format=vs.YUV444P16), dpth)),
                                          "x {0} <= x {1} >= or y {2} - abs {3} <= and z {2} - abs {3} <= and {4} {5} ?".format(
                                              lo + max_value,
