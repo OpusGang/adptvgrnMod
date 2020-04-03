@@ -28,6 +28,7 @@ def adptvgrnMod(clip_in: vs.VideoNode, strength=0.25, cstrength=None, size=1, sh
       - Additional protect_neutral parameter to keep neutral chroma in blacks neutral.
     - Added seed option.
     - Change defaults: static=False, fade_edges=True
+    - Uses kagefunc's adaptive_grain to generate Rust mask instead of doing so itself.
     """
 
     def m4(x):
@@ -38,8 +39,9 @@ def adptvgrnMod(clip_in: vs.VideoNode, strength=0.25, cstrength=None, size=1, sh
     dpth = get_depth(clip_in)
 
     try:
-        mask = core.adg.Mask(clip.std.PlaneStats(), luma_scaling)
-    except AttributeError:
+        from kagefunc import adaptive_grain
+        mask = adaptive_grain(clip, luma_scaling=luma_scaling, show_mask=True)
+    except (ModuleNotFoundError, AttributeError):
         import numpy as np
         def fill_lut(y):
             """
