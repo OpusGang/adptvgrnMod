@@ -1,7 +1,6 @@
 from vapoursynth import core
 import vapoursynth as vs
-from vsutil import get_depth, get_y, split, plane
-import fvsfunc as fvf
+from vsutil import get_depth, get_y, split, plane, depth
 import math
 from functools import partial
 
@@ -69,11 +68,11 @@ def adptvgrnMod(clip_in: vs.VideoNode, strength=0.25, cstrength=None, size=1, sh
             table = lut[int(frameluma)]
             return core.std.Lut(clip, lut=table)
 
-        luma = get_y(fvf.Depth(clip_in, 8)).std.PlaneStats()
+        luma = get_y(depth(clip_in, 8)).std.PlaneStats()
         mask = core.std.FrameEval(luma, partial(generate_mask, clip=luma), prop_src=luma)
 
     if mask.format.bits_per_sample != dpth:
-        mask = fvf.Depth(mask, bits=dpth)
+        mask = depth(mask, bits=dpth)
     if show_mask:
         return mask
 
@@ -115,7 +114,7 @@ def adptvgrnMod(clip_in: vs.VideoNode, strength=0.25, cstrength=None, size=1, sh
             neutral, lo, hi[0]), limit_expr.format(neutral, lo, hi[1])])
         if protect_neutral and (grain_chroma or cstrength > 0):
             max_value = round(3 * cstrength) << (dpth - 8)
-            neutral_mask = core.std.Expr(split(fvf.Depth(clip.resize.Bilinear(format=vs.YUV444P16), dpth)),
+            neutral_mask = core.std.Expr(split(depth(clip.resize.Bilinear(format=vs.YUV444P16), dpth)),
                                          "x {0} <= x {1} >= or y {2} - abs {3} <= and z {2} - abs {3} <= and {4} {5} ?".format(
                                              lo + max_value,
                                              hi[1] - max_value, neutral,
