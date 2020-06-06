@@ -72,7 +72,7 @@ def adptvgrnMod(clip_in: vs.VideoNode, strength=0.25, cstrength=None, size=1, sh
         mask = core.std.FrameEval(luma, partial(generate_mask, clip=luma), prop_src=luma)
 
     if mask.format.bits_per_sample != dpth:
-        mask = depth(mask, bits=dpth)
+        mask = depth(mask, dpth)
     if show_mask:
         return mask
 
