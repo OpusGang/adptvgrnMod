@@ -36,7 +36,7 @@ def adptvgrnMod(clip_in: vs.VideoNode, strength=0.25, cstrength=None, size=1, sh
         from kagefunc import adaptive_grain
         mask = adaptive_grain(clip_in, luma_scaling=luma_scaling, show_mask=True)
     except ModuleNotFoundError:
-        mask = core.adg.Mask(clip.std.PlaneStats(), luma_scaling)
+        mask = core.adg.Mask(clip_in.std.PlaneStats(), luma_scaling)
 
     if get_depth(mask) != dpth:
         mask = depth(mask, dpth)
