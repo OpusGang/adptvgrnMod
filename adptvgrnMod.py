@@ -101,8 +101,8 @@ def sizedgrn(clip, strength=0.25, cstrength=None, size=1, sharp=50, static=False
                 hi = 2 * [(1 << dpth) - 1]
         limit_expr = "x y {0} - abs - {1} < x y {0} - abs + {2} > or x y {0} - x + ?"
         grained = core.std.Expr([clip, grained], [limit_expr.format(
-            neutral, lo, hi[0]), limit_expr.format(neutral, lo, hi[1])])
-        if protect_neutral and (grain_chroma or cstrength > 0):
+            neutral, lo, hi[_]) for _ in range(len(split(clip)))])
+        if protect_neutral and (grain_chroma or cstrength > 0) and clip.format.color_family == vs.YUV:
             max_value = round(3 * cstrength) << (dpth - 8)
             neutral_mask = core.std.Expr(split(depth(clip.resize.Bilinear(format=vs.YUV444P16), dpth)),
                                          "x {0} <= x {1} >= or y {2} - abs {3} <= and z {2} - abs {3} <= and {4} {5} ?".format(
