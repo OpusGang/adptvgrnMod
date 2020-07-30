@@ -85,6 +85,8 @@ def sizedgrn(clip, strength=0.25, cstrength=None, size=1, sharp=50, static=False
         grained = core.resize.Bicubic(grained, cw, ch, filter_param_a=b, filter_param_b=c)
 
     if fade_edges:
+        if isinstance(hi, int) and len(hi) == 2:
+            hi = hi + hi[1]
         if lo:
             lo = lo << (dpth - 8)
         if hi:
@@ -93,15 +95,15 @@ def sizedgrn(clip, strength=0.25, cstrength=None, size=1, sharp=50, static=False
             if not lo:
                 lo = 16 << (dpth - 8)
             if not hi:
-                hi = [235 << (dpth - 8), 240 << (dpth - 8)]
+                hi = [235 << (dpth - 8)] + 2 * [240 << (dpth - 8)]
         else:
             if not lo:
                 lo = 0
             if not hi:
-                hi = 2 * [(1 << dpth) - 1]
+                hi = 3 * [(1 << dpth) - 1]
         limit_expr = "x y {0} - abs - {1} < x y {0} - abs + {2} > or x y {0} - x + ?"
         grained = core.std.Expr([clip, grained], [limit_expr.format(
-            neutral, lo, hi[_]) for _ in range(len(split(clip)))])
+            neutral, lo, hi[_]) for _ in range(0, clip.format.num_planes)])
         if protect_neutral and (grain_chroma or cstrength > 0) and clip.format.color_family == vs.YUV:
             max_value = round(3 * cstrength) << (dpth - 8)
             neutral_mask = core.std.Expr(split(depth(clip.resize.Bilinear(format=vs.YUV444P16), dpth)),
