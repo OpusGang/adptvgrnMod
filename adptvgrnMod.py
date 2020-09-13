@@ -113,7 +113,7 @@ def sizedgrn(clip, strength=0.25, cstrength=None, size=1, sharp=50, static=False
                                              max_value, (1 << dpth) - 1, 0))
             grained = core.std.MaskedMerge(grained, clip, neutral_mask, planes=[1, 2])
     else:
-        grained = core.std.MakeDiff(clip, grained)
+        grained = core.std.MergeDiff(clip, grained)
     return grained
 
 
