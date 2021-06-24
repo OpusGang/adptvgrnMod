@@ -1,14 +1,13 @@
 from vapoursynth import core
 import vapoursynth as vs
-from vsutil import get_depth, get_y, split, plane, depth
+from vsutil import get_depth, get_y, split, plane, depth, scale_value
 import math
 from functools import partial
 
 
 def adptvgrnMod(clip_in: vs.VideoNode, strength=0.25, cstrength=None, size=1, sharp=50, static=False, luma_scaling=12,
                 grain_chroma=True, grainer=None, fade_edges=True, tv_range=True, lo=None, hi=None, protect_neutral=True,
-                seed=-1,
-                show_mask=False) -> vs.VideoNode:
+                seed=-1, scale_offsets=True, show_mask=False) -> vs.VideoNode:
     """
     Original header:
     Generates grain based on frame and pixel brightness. Details can be found here:
@@ -45,15 +44,18 @@ def adptvgrnMod(clip_in: vs.VideoNode, strength=0.25, cstrength=None, size=1, sh
 
     grained = sizedgrn(clip_in, strength=strength, cstrength=cstrength, size=size, sharp=sharp, static=static,
                        grain_chroma=grain_chroma, grainer=grainer, fade_edges=fade_edges, tv_range=tv_range, lo=lo,
-                       hi=hi, protect_neutral=protect_neutral, seed=seed)
+                       hi=hi, protect_neutral=protect_neutral, seed=seed, scale_offsets=scale_offsets)
 
     return core.std.MaskedMerge(clip_in, grained, mask)
 
 
 def sizedgrn(clip, strength=0.25, cstrength=None, size=1, sharp=50, static=False, grain_chroma=True,
-             grainer=None, fade_edges=True, tv_range=True, lo=None, hi=None, protect_neutral=True, seed=-1):
+             grainer=None, fade_edges=True, tv_range=True, lo=None, hi=None, protect_neutral=True, seed=-1,
+             scale_offsets=True):
     dpth = get_depth(clip)
-    neutral = 1 << (get_depth(clip) - 1)
+    def scale(v, chroma=False):
+        return scale_value(v, 8, dpth, scale_offsets=scale_offsets, chroma=chroma)
+    neutral = [scale(128)] + 2 * [scale(128, 1)]
 
     def m4(x):
         return 16 if x < 16 else math.floor(x / 4 + 0.5) * 4
@@ -74,7 +76,7 @@ def sizedgrn(clip, strength=0.25, cstrength=None, size=1, sharp=50, static=False
     elif cstrength is None and not grain_chroma:
         cstrength = 0
 
-    blank = core.std.BlankClip(clip, sx, sy, color=[neutral for i in split(clip)])
+    blank = core.std.BlankClip(clip, sx, sy, color=[neutral[_] for _ in range(clip.format.num_planes)])
     if grainer is None:
         grained = core.grain.Add(blank, var=strength, uvar=cstrength, constant=static, seed=seed)
     else:
@@ -85,35 +87,38 @@ def sizedgrn(clip, strength=0.25, cstrength=None, size=1, sharp=50, static=False
         grained = core.resize.Bicubic(grained, cw, ch, filter_param_a=b, filter_param_b=c)
 
     if fade_edges:
-        if isinstance(hi, int) and len(hi) == 2:
-            hi = hi + hi[1]
-        if lo:
-            lo = lo << (dpth - 8)
-        if hi:
-            hi = [_ << (dpth - 8) for _ in hi]
-        if tv_range:
-            if not lo:
-                lo = 16 << (dpth - 8)
-            if not hi:
-                hi = [235 << (dpth - 8)] + 2 * [240 << (dpth - 8)]
-        else:
-            if not lo:
-                lo = 0
-            if not hi:
-                hi = 3 * [(1 << dpth) - 1]
+        if lo is None:
+            lo = [scale(16), scale(16, 1)] if tv_range else [0, scale(0, 1)]
+        elif isinstance(lo, int):
+            lo = [scale(lo), scale(lo, 1)]
+
+        if hi is None:
+            hi = [scale(235), scale(240, 1)] if tv_range else [scale(255), scale(255, 1)]
+        elif isinstance(hi, int) or isinstance(hi, float) or (isinstance(hi[0], int) and hi[0] != 1):
+            hi = [scale(hi), scale(hi, 1)]
+
         limit_expr = "x y {0} - abs - {1} < x y {0} - abs + {2} > or x y {0} - x + ?"
-        grained = core.std.Expr([clip, grained], [limit_expr.format(
-            neutral, lo, hi[_]) for _ in range(0, clip.format.num_planes)])
+        if clip.format.sample_type == vs.INTEGER:
+            limit_expr = 2 * [limit_expr]
+        else:
+            limit_expr = [limit_expr, "x y abs + {2} > x abs y - {1} < or x x y + ?"]
+        grained = core.std.Expr([clip, grained], [limit_expr[_].format(
+            neutral[_], lo[_], hi[_]) for _ in range(0, clip.format.num_planes - 1)])
+
         if protect_neutral and (grain_chroma or cstrength > 0) and clip.format.color_family == vs.YUV:
-            max_value = round(3 * cstrength) << (dpth - 8)
+            max_value = scale(round(3 * math.sqrt(cstrength)))
             neutral_mask = core.std.Expr(split(depth(clip.resize.Bilinear(format=vs.YUV444P16), dpth)),
                                          "x {0} <= x {1} >= or y {2} - abs {3} <= and z {2} - abs {3} <= and {4} {5} ?".format(
-                                             lo + max_value,
-                                             hi[1] - max_value, neutral,
-                                             max_value, (1 << dpth) - 1, 0))
+                                             lo[1] + max_value,
+                                             hi[1] - max_value, neutral[1],
+                                             max_value, scale(255), 0))
             grained = core.std.MaskedMerge(grained, clip, neutral_mask, planes=[1, 2])
     else:
-        grained = core.std.MergeDiff(clip, grained)
+        if clip.format.sample_type == vs.INTEGER:
+            grained = core.std.MergeDiff(clip, grained)
+        else:
+            grained = core.std.Expr([clip, grained], [f"y {neutral[_]} - x +" for _ in range(clip.format.num_planes - 1)])
+
     return grained
 
 
