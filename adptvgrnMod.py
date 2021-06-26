@@ -76,6 +76,11 @@ def sizedgrn(clip, strength=0.25, cstrength=None, size=1, sharp=50, static=False
     elif cstrength is None and not grain_chroma:
         cstrength = 0
 
+    # compensate for AddGrain's weirdness with float
+    if clip.format.sample_type == vs.FLOAT:
+        strength *= 5 / 4
+        cstrength *= 5 / 4
+
     blank = core.std.BlankClip(clip, sx, sy, color=[neutral[_] for _ in range(clip.format.num_planes)])
     if grainer is None:
         grained = core.grain.Add(blank, var=strength, uvar=cstrength, constant=static, seed=seed)
@@ -106,7 +111,9 @@ def sizedgrn(clip, strength=0.25, cstrength=None, size=1, sharp=50, static=False
             neutral[_], lo[_], hi[_]) for _ in range(0, clip.format.num_planes - 1)])
 
         if protect_neutral and (grain_chroma or cstrength > 0) and clip.format.color_family == vs.YUV:
-            max_value = scale(round(3 * math.sqrt(cstrength)))
+            # addgrain is really weird - I would expect 3 but it's more like 5
+            max_value = scale_value(round(5 * math.sqrt(cstrength)), 8, dpth)
+            # y <= (lo + value_max) or y >= (hi - value_max) and abs(u - neutral) <= value_max and abs(v - neutral) <= value_max
             neutral_mask = core.std.Expr(split(depth(clip.resize.Bilinear(format=vs.YUV444P16), dpth)),
                                          "x {0} <= x {1} >= or y {2} - abs {3} <= and z {2} - abs {3} <= and {4} {5} ?".format(
                                              lo[1] + max_value,
