@@ -39,7 +39,7 @@ def adptvgrnMod(
     :param tv_range: TV/PC legal range.
     :param lo: Overwrite legal range's minimums. Value is scaled from 8-bit to clip depth.
     :param hi: Overwrite legal range's maximums. Value is scaled from 8-bit to clip depth.
-    :param protect_neutral: Disable chroma grain on 100% white and 0% black.
+    :param protect_neutral: Disable chroma grain on neutral chroma.
     :param seed: Grain seed for AddGrain.
     :param show_mask: Show adaptive_grain mask.
 
@@ -96,7 +96,7 @@ def sizedgrn(
     :param tv_range: TV/PC legal range.
     :param lo: Overwrite legal range's minimums. Value is scaled from 8-bit to clip depth.
     :param hi: Overwrite legal range's maximums. Value is scaled from 8-bit to clip depth.
-    :param protect_neutral: Disable chroma grain on 100% white and 0% black.
+    :param protect_neutral: Disable chroma grain on neutral chroma.
     :param seed: Grain seed for AddGrain.
 
     :returns: Grained clip.
@@ -129,10 +129,6 @@ def sizedgrn(
         strength = [strength, .5 * strength]
     elif len(strength) > 2:
         raise ValueError("sizedgrn only supports 2 strength values")
-
-    # compensate for AddGrain's weirdness with float
-    if clip.format.sample_type == vs.FLOAT:
-        strength = [s / 0.86 for s in strength]
 
     blank = core.std.BlankClip(clip, sx, sy, color=[neutral[_] for _ in range(clip.format.num_planes)])
     if grainer is None:
