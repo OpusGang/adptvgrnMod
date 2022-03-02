@@ -162,11 +162,11 @@ def sizedgrn(
             neutral[_], lo[_], hi[_]) for _ in range(0, clip.format.num_planes - 1)])
 
         if protect_neutral and strength[1] > 0 and clip.format.color_family == vs.YUV:
-            format444 = vs.query_video_format(vs.YUV, clip.format.sample_type, dpth, 0, 0)
+            format444 = core.query_video_format(vs.YUV, clip.format.sample_type, dpth, 0, 0)
             neutral_mask = clip.resize.Bicubic(format=format444)
             # disable grain if neutral chroma
             neutral_mask = core.std.Expr(split(neutral_mask),
-                                         f"x {neutral[1]} = y {neutral[1]} = and {scale(255)} 0 ?"
+                                         f"y {neutral[1]} = z {neutral[1]} = and {scale(255)} 0 ?"
                                          )
             grained = core.std.MaskedMerge(grained, clip, neutral_mask, planes=[1, 2])
     else:
