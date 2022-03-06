@@ -55,3 +55,5 @@ neutral grays.
 """
 ```
 
+### Contact
+- **IRC Channel**: `#OpusGang` on `irc.libera.chat`
