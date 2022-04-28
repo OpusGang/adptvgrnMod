@@ -1,6 +1,7 @@
 import vapoursynth as vs
 core = vs.core
 from vsutil import get_depth, split, depth, scale_value
+from typing import Callable
 import math
 
 
@@ -11,7 +12,7 @@ def adptvgrnMod(
         sharp: int = 50,
         static: bool = False,
         luma_scaling: int = 12,
-        grainer: vs.VideoNode | None = None,
+        grainer: Callable[[vs.VideoNode, ...], vs.VideoNode] | None = None,
         fade_edges: bool = True,
         tv_range: bool = True,
         lo: int | None = None,
@@ -71,7 +72,7 @@ def sizedgrn(
         size: float | int = 1,
         sharp: int = 50,
         static: bool = False,
-        grainer: vs.VideoNode | None = None,
+        grainer: Callable[[vs.VideoNode, ...], vs.VideoNode] | None = None,
         fade_edges: bool = True,
         tv_range: bool = True,
         lo: int | None = None,
