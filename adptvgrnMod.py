@@ -11,6 +11,7 @@ def adptvgrnMod(
         size: float | int = 1,
         sharp: int = 50,
         static: bool = False,
+        temporal_average: int = 0,
         luma_scaling: int = 12,
         grainer: Callable[[vs.VideoNode, ...], vs.VideoNode] | None = None,
         fade_edges: bool = True,
@@ -60,7 +61,7 @@ def adptvgrnMod(
     if show_mask:
         return mask
 
-    grained = sizedgrn(clip_in, strength, size, sharp, static, grainer, fade_edges, tv_range, lo, hi, protect_neutral,
+    grained = sizedgrn(clip_in, strength, size, sharp, static, temporal_average, grainer, fade_edges, tv_range, lo, hi, protect_neutral,
             seed)
 
     return core.std.MaskedMerge(clip_in, grained, mask)
@@ -72,6 +73,7 @@ def sizedgrn(
         size: float | int = 1,
         sharp: int = 50,
         static: bool = False,
+        temporal_average: int = 0,
         grainer: Callable[[vs.VideoNode, ...], vs.VideoNode] | None = None,
         fade_edges: bool = True,
         tv_range: bool = True,
@@ -141,6 +143,9 @@ def sizedgrn(
         if size > 1.5:
             grained = core.resize.Bicubic(grained, sxa, sya, filter_param_a=b, filter_param_b=c)
         grained = core.resize.Bicubic(grained, cw, ch, filter_param_a=b, filter_param_b=c)
+
+    if not static and temporal_average > 0:
+        grained = core.std.Merge(grained, core.std.AverageFrames(grained, weights=[1] * 3), weight=temporal_average / 100)
 
     if fade_edges:
         if lo is None:
