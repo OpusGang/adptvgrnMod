@@ -12,6 +12,7 @@ def adptvgrnMod(
         sharp: int = 50,
         static: bool = False,
         temporal_average: int = 0,
+        temporal_radius: int = 3,
         luma_scaling: int = 12,
         grainer: Callable[[vs.VideoNode, ...], vs.VideoNode] | None = None,
         fade_edges: bool = True,
@@ -61,8 +62,7 @@ def adptvgrnMod(
     if show_mask:
         return mask
 
-    grained = sizedgrn(clip_in, strength, size, sharp, static, temporal_average, grainer, fade_edges, tv_range, lo, hi, protect_neutral,
-            seed)
+    grained = sizedgrn(clip_in, strength, size, sharp, static, temporal_average, temporal_radius, grainer, fade_edges, tv_range, lo, hi, protect_neutral, seed)
 
     return core.std.MaskedMerge(clip_in, grained, mask)
 
@@ -74,6 +74,7 @@ def sizedgrn(
         sharp: int = 50,
         static: bool = False,
         temporal_average: int = 0,
+        temporal_radius: int = 3,
         grainer: Callable[[vs.VideoNode, ...], vs.VideoNode] | None = None,
         fade_edges: bool = True,
         tv_range: bool = True,
@@ -128,12 +129,17 @@ def sizedgrn(
     b = sharp / -50 + 1
     c = (1 - b) / 2
 
+    if not static and temporal_average > 0:
+        length = clip.num_frames + temporal_radius - 1
+    else:
+        length = clip.num_frames
+
     if not isinstance(strength, list):
         strength = [strength, .5 * strength]
     elif len(strength) > 2:
         raise ValueError("sizedgrn only supports 2 strength values")
 
-    blank = core.std.BlankClip(clip, sx, sy, color=[neutral[_] for _ in range(clip.format.num_planes)])
+    blank = core.std.BlankClip(clip, sx, sy, length=length, color=[neutral[_] for _ in range(clip.format.num_planes)])
     if grainer is None:
         grained = core.grain.Add(blank, var=strength[0], uvar=strength[1], constant=static, seed=seed)
     else:
@@ -145,7 +151,9 @@ def sizedgrn(
         grained = core.resize.Bicubic(grained, cw, ch, filter_param_a=b, filter_param_b=c)
 
     if not static and temporal_average > 0:
-        grained = core.std.Merge(grained, core.std.AverageFrames(grained, weights=[1] * 3), weight=temporal_average / 100)
+        cut = (temporal_radius - 1) // 2
+        grained = core.std.Merge(grained, core.std.AverageFrames(grained, weights=[1] * temporal_radius), weight=temporal_average / 100)
+        grained = grained[cut:-cut]
 
     if fade_edges:
         if lo is None:
