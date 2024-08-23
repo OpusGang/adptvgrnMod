@@ -1,3 +1,5 @@
+[vs-deband](https://github.com/Jaded-Encoding-Thaumaturgy/vs-deband) has more up to date graining functions with all the features from here.
+
 ## adptvgrnMod
 
 A modified `kagefunc.adaptive_grain`. New additions include `GrainFactory3`'s grain size and sharpness, fading values
